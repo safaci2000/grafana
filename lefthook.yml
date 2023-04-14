@@ -1,0 +1,21 @@
+pre-commit:
+  commands:
+    frontend-betterer:
+      glob: '*.{ts,tsx}'
+      run: yarn betterer precommit --reporter ./scripts/bettererReporter.ts {staged_files}
+
+    frontend-eslint:
+      glob: '*.{js,ts,tsx}'
+      run: yarn eslint --ext .js,.tsx,.ts --cache --fix {staged_files}
+
+    frontend-format:
+      glob: '*.{js,ts,tsx,json,scss,md,mdx}'
+      run: yarn prettier --write {staged_files}
+
+    backend-format:
+      glob: '*pkg/**/*.go'
+      run: gofmt -w -s {staged_files}
+
+    fix-cue:
+      glob: '*kinds/**/*.cue'
+      run: make fix-cue
