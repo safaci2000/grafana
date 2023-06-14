@@ -22,7 +22,6 @@ import { SafeDynamicImport } from '../core/components/DynamicImports/SafeDynamic
 import { RouteDescriptor } from '../core/navigation/types';
 import { getEmbeddedDashboardRoutes, getPublicDashboardRoutes } from '../features/dashboard/routes';
 
-// Comment 3
 export const extraRoutes: RouteDescriptor[] = [];
 
 export function getAppRoutes(): RouteDescriptor[] {
