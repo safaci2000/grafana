@@ -4,6 +4,7 @@ skip_output:
   - skips
 
 pre-commit:
+  parallel: true
   commands:
     frontend-betterer:
       glob: '*.{ts,tsx}'
@@ -11,16 +12,22 @@ pre-commit:
 
     frontend-eslint:
       glob: '*.{js,ts,tsx}'
-      run: yarn eslint --ext .js,.tsx,.ts --cache --fix {staged_files}
+      run: |
+        yarn eslint --ext .js,.tsx,.ts --cache --fix {staged_files}
+        yarn prettier --write {staged_files}
 
-    frontend-format:
-      glob: '*.{js,ts,tsx,json,scss,md,mdx}'
+    other-format:
+      glob: '*.{json,scss,md,mdx}'
       run: yarn prettier --write {staged_files}
 
     backend-format:
       glob: '*pkg/**/*.go'
       run: gofmt -w -s {staged_files}
 
-    fix-cue:
+    cue-fix-kinds:
       glob: '*kinds/**/*.cue'
+      run: make fix-cue
+
+    cue-fix-public:
+      glob: '*public/app/plugins/**/**/*.cue'
       run: make fix-cue
