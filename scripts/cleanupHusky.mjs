@@ -27,7 +27,8 @@ const oldHuskyHooks = [
 ];
 
 //
-// Husky's postinstall script changes your local repo git config, so undo those changes
+// Husky's postinstall script changes your local repo git config, so undo those changes.
+// Still respect the setting though if it's been set to something else.
 const hooksConfig = childProcess.spawnSync('git', ['config', 'core.hooksPath'], { encoding: 'utf-8' });
 if (hooksConfig.stdout.trim() === '.husky') {
   childProcess.spawnSync('git', ['config', '--unset', 'core.hooksPath'], { encoding: 'utf-8' });
@@ -35,17 +36,13 @@ if (hooksConfig.stdout.trim() === '.husky') {
 }
 
 //
-// When users first 'upgrade' to lefthook, lefthook will be installed to the old husky directory
-// so now we reinstall lefthook after changing the hooksPath in the previous step.
+// Previous version of husky also installed its hooks into .git/hooks which we now need to
+// clean up. We'll just rename them to .old so nothing is lost permanently.
 if (changedHooksPath) {
-  childProcess.spawnSync('yarn', ['run', 'lefthook', 'install', '-f'], { stdio: 'inherit' });
-
-  //
-  // Previous version of husky also installed its hooks into .git/hooks which we now need to
-  // clean up. We'll just rename them to .old so nothing is lost permanently.
   for (const hookFileName of oldHuskyHooks) {
     const hookPath = path.join('.git', 'hooks', hookFileName);
     try {
+      // Only rename the hook if it looks like a husky hook
       const hookContents = fs.readFileSync(hookPath).toString();
       if (!hookContents.includes('husky')) {
         continue;
@@ -62,8 +59,8 @@ if (changedHooksPath) {
 }
 
 //
-// Leave a helpful message in the old .husky directory
-// We don't delete this directory for them in case they've added their own git hooks
+// Leave a helpful message in the old .husky directory.
+// We don't delete this directory for them in case they've added their own git hooks.
 try {
   const message = [
     `This directory is no longer used for git hooks and is safe to delete if you want to.`,
