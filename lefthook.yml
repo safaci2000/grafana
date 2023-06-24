@@ -3,6 +3,10 @@ skip_output:
   - execution_out
   - skips
 
+min_version: 1.4.3
+
+rc: ./lefthook.rc
+
 pre-commit:
   parallel: true
   commands:
