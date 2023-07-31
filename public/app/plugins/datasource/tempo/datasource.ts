@@ -85,6 +85,9 @@ export class TempoDatasource extends DataSourceWithBackend<TempoQuery, TempoJson
   spanBar?: SpanBarOptions;
   languageProvider: TempoLanguageProvider;
 
+  // The version of Tempo running on the backend
+  tempoVersion: string | undefined;
+
   constructor(
     private instanceSettings: DataSourceInstanceSettings<TempoJsonData>,
     private readonly templateSrv: TemplateSrv = getTemplateSrv()
@@ -112,6 +115,19 @@ export class TempoDatasource extends DataSourceWithBackend<TempoQuery, TempoJson
       };
     }
   }
+
+  init = async () => {
+    const response = await lastValueFrom(
+      this._request('/api/status/buildinfo').pipe(
+        map((response) => response),
+        catchError((error) => {
+          console.log('Failure in retrieving build information', error.data.message);
+          return of({ error, data: {} });
+        })
+      )
+    );
+    this.tempoVersion = response.data.version;
+  };
 
   query(options: DataQueryRequest<TempoQuery>): Observable<DataQueryResponse> {
     const subQueries: Array<Observable<DataQueryResponse>> = [];
@@ -379,6 +395,7 @@ export class TempoDatasource extends DataSourceWithBackend<TempoQuery, TempoJson
 
     return super.query(traceRequest).pipe(
       map((response) => {
+        console.log(response);
         if (response.error) {
           return response;
         }
@@ -418,6 +435,8 @@ export class TempoDatasource extends DataSourceWithBackend<TempoQuery, TempoJson
     const url = `${this.instanceSettings.url}${apiUrl}${params.length ? `?${params}` : ''}`;
     const req = { ...options, url };
 
+    //eslint-disable-next-line
+    // debugger;
     return getBackendSrv().fetch(req);
   }
 
