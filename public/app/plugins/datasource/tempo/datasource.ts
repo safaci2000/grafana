@@ -395,7 +395,6 @@ export class TempoDatasource extends DataSourceWithBackend<TempoQuery, TempoJson
 
     return super.query(traceRequest).pipe(
       map((response) => {
-        console.log(response);
         if (response.error) {
           return response;
         }
@@ -435,8 +434,6 @@ export class TempoDatasource extends DataSourceWithBackend<TempoQuery, TempoJson
     const url = `${this.instanceSettings.url}${apiUrl}${params.length ? `?${params}` : ''}`;
     const req = { ...options, url };
 
-    //eslint-disable-next-line
-    // debugger;
     return getBackendSrv().fetch(req);
   }
 
