@@ -48,19 +48,17 @@ func (s *testService) IsDisabled() bool {
 
 func testServer(t *testing.T, services ...registry.BackgroundService) *Server {
 	t.Helper()
-	s, err := newServer(Options{}, setting.NewCfg(), nil, &acimpl.Service{}, nil, backgroundsvcs.NewBackgroundServiceRegistry(services...), &MockModuleService{})
+	s, err := newServer(Options{}, setting.NewCfg(), nil, &acimpl.Service{}, nil, backgroundsvcs.NewBackgroundServiceRegistry(services...))
 	require.NoError(t, err)
-	// Required to skip configuration initialization that causes
-	// DI errors in this test.
-	s.isInitialized = true
 	return s
 }
 
 func TestServer_Run_Error(t *testing.T) {
 	testErr := errors.New("boom")
 	s := testServer(t, newTestService(nil, false), newTestService(testErr, false))
-	err := s.Run()
-	require.ErrorIs(t, err, testErr)
+	_ = s.StartAsync(context.Background())
+	_ = s.AwaitRunning(context.Background())
+	require.ErrorIs(t, s.FailureCase(), testErr)
 }
 
 func TestServer_Shutdown(t *testing.T) {

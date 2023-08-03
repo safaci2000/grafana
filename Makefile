@@ -47,7 +47,7 @@ $(MERGED_SPEC_TARGET): $(SPEC_TARGET) $(NGALERT_SPEC_TARGET) $(SWAGGER) ## Merge
 	$(SWAGGER) mixin $(SPEC_TARGET) $(NGALERT_SPEC_TARGET) --ignore-conflicts -o $(MERGED_SPEC_TARGET)
 
 $(SPEC_TARGET): $(SWAGGER) ## Generate API Swagger specification
-	SWAGGER_GENERATE_EXTENSION=false $(SWAGGER) generate spec -m -w pkg/server -o $(SPEC_TARGET) \
+	SWAGGER_GENERATE_EXTENSION=false $(SWAGGER) generate spec -m -w pkg/modules/all -o $(SPEC_TARGET) \
 	-x "github.com/grafana/grafana/pkg/services/ngalert/api/tooling/definitions" \
 	-x "github.com/prometheus/alertmanager" \
 	-i pkg/api/swagger_tags.json \
@@ -78,7 +78,7 @@ gen-cue: ## Do all CUE/Thema code generation
 
 gen-go: $(WIRE)
 	@echo "generate go files"
-	$(WIRE) gen -tags $(WIRE_TAGS) ./pkg/server
+	$(WIRE) gen -tags $(WIRE_TAGS) ./pkg/modules/...
 
 fix-cue: $(CUE)
 	@echo "formatting cue files"

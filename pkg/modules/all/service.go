@@ -13,6 +13,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/grafana/dskit/services"
+
 	"github.com/grafana/grafana/pkg/api"
 	_ "github.com/grafana/grafana/pkg/extensions"
 	"github.com/grafana/grafana/pkg/infra/log"
@@ -39,15 +41,10 @@ type Options struct {
 func New(opts Options, cfg *setting.Cfg, httpServer *api.HTTPServer, roleRegistry accesscontrol.RoleRegistry,
 	provisioningService provisioning.ProvisioningService, backgroundServiceProvider registry.BackgroundServiceRegistry,
 	usageStatsProvidersRegistry registry.UsageStatsProvidersRegistry, statsCollectorService *statscollector.Service,
-	moduleService modules.Engine,
 ) (*Server, error) {
 	statsCollectorService.RegisterProviders(usageStatsProvidersRegistry.GetServices())
-	s, err := newServer(opts, cfg, httpServer, roleRegistry, provisioningService, backgroundServiceProvider, moduleService)
+	s, err := newServer(opts, cfg, httpServer, roleRegistry, provisioningService, backgroundServiceProvider)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := s.init(); err != nil {
 		return nil, err
 	}
 
@@ -56,19 +53,11 @@ func New(opts Options, cfg *setting.Cfg, httpServer *api.HTTPServer, roleRegistr
 
 func newServer(opts Options, cfg *setting.Cfg, httpServer *api.HTTPServer, roleRegistry accesscontrol.RoleRegistry,
 	provisioningService provisioning.ProvisioningService, backgroundServiceProvider registry.BackgroundServiceRegistry,
-	moduleService modules.Engine,
 ) (*Server, error) {
-	rootCtx, shutdownFn := context.WithCancel(context.Background())
-	childRoutines, childCtx := errgroup.WithContext(rootCtx)
-
 	s := &Server{
-		context:             childCtx,
-		childRoutines:       childRoutines,
 		HTTPServer:          httpServer,
 		provisioningService: provisioningService,
 		roleRegistry:        roleRegistry,
-		shutdownFn:          shutdownFn,
-		shutdownFinished:    make(chan struct{}),
 		log:                 log.New("server"),
 		cfg:                 cfg,
 		pidFile:             opts.PidFile,
@@ -76,23 +65,20 @@ func newServer(opts Options, cfg *setting.Cfg, httpServer *api.HTTPServer, roleR
 		commit:              opts.Commit,
 		buildBranch:         opts.BuildBranch,
 		backgroundServices:  backgroundServiceProvider.GetServices(),
-		moduleService:       moduleService,
 	}
+
+	s.BasicService = services.NewBasicService(s.start, s.run, s.stop).WithName(modules.All)
 
 	return s, nil
 }
 
 // Server is responsible for managing the lifecycle of services.
 type Server struct {
-	context          context.Context
-	shutdownFn       context.CancelFunc
-	childRoutines    *errgroup.Group
-	log              log.Logger
-	cfg              *setting.Cfg
-	shutdownOnce     sync.Once
-	shutdownFinished chan struct{}
-	isInitialized    bool
-	mtx              sync.Mutex
+	*services.BasicService
+
+	log log.Logger
+	cfg *setting.Cfg
+	mtx sync.Mutex
 
 	pidFile            string
 	version            string
@@ -103,25 +89,11 @@ type Server struct {
 	HTTPServer          *api.HTTPServer
 	roleRegistry        accesscontrol.RoleRegistry
 	provisioningService provisioning.ProvisioningService
-	moduleService       modules.Engine
 }
 
-// init initializes the server and its services.
-func (s *Server) init() error {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	if s.isInitialized {
-		return nil
-	}
-	s.isInitialized = true
-
+// start initializes the server and its services.
+func (s *Server) start(ctx context.Context) error {
 	if err := s.writePIDFile(); err != nil {
-		return err
-	}
-
-	// Initialize dskit modules.
-	if err := s.moduleService.Init(s.context); err != nil {
 		return err
 	}
 
@@ -129,32 +101,16 @@ func (s *Server) init() error {
 		return err
 	}
 
-	if err := s.roleRegistry.RegisterFixedRoles(s.context); err != nil {
+	if err := s.roleRegistry.RegisterFixedRoles(ctx); err != nil {
 		return err
 	}
 
-	return s.provisioningService.RunInitProvisioners(s.context)
+	return s.provisioningService.RunInitProvisioners(ctx)
 }
 
-// Run initializes and starts services. This will block until all services have
-// exited. To initiate shutdown, call the Shutdown method in another goroutine.
-func (s *Server) Run() error {
-	defer close(s.shutdownFinished)
-
-	if err := s.init(); err != nil {
-		return err
-	}
-
-	// Start dskit modules.
-	s.childRoutines.Go(func() error {
-		err := s.moduleService.Run(s.context)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return err
-		}
-		return nil
-	})
-
+func (s *Server) run(ctx context.Context) error {
 	services := s.backgroundServices
+	childRoutines := new(errgroup.Group)
 
 	// Start background services.
 	for _, svc := range services {
@@ -164,14 +120,14 @@ func (s *Server) Run() error {
 
 		service := svc
 		serviceName := reflect.TypeOf(service).String()
-		s.childRoutines.Go(func() error {
+		childRoutines.Go(func() error {
 			select {
-			case <-s.context.Done():
-				return s.context.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			default:
 			}
 			s.log.Debug("Starting background service", "service", serviceName)
-			err := service.Run(s.context)
+			err := service.Run(ctx)
 			// Do not return context.Canceled error since errgroup.Group only
 			// returns the first error to the caller - thus we can miss a more
 			// interesting error.
@@ -187,32 +143,16 @@ func (s *Server) Run() error {
 	s.notifySystemd("READY=1")
 
 	s.log.Debug("Waiting on services...")
-	return s.childRoutines.Wait()
+	return childRoutines.Wait()
 }
 
-// Shutdown initiates Grafana graceful shutdown. This shuts down all
-// running background services. Since Run blocks Shutdown supposed to
-// be run from a separate goroutine.
-func (s *Server) Shutdown(ctx context.Context, reason string) error {
-	var err error
-	s.shutdownOnce.Do(func() {
-		s.log.Info("Shutdown started", "reason", reason)
-		if err := s.moduleService.Shutdown(ctx); err != nil {
-			s.log.Error("Failed to shutdown modules", "error", err)
-		}
-		// Call cancel func to stop background services.
-		s.shutdownFn()
-		// Wait for server to shut down
-		select {
-		case <-s.shutdownFinished:
-			s.log.Debug("Finished waiting for server to shut down")
-		case <-ctx.Done():
-			s.log.Warn("Timed out while waiting for server to shut down")
-			err = fmt.Errorf("timeout waiting for shutdown")
-		}
-	})
-
-	return err
+func (s *Server) stop(failureReason error) error {
+	if failureReason != nil {
+		s.log.Error("Server is shutting down", "reason", failureReason)
+	} else {
+		s.log.Info("Server is shutting down")
+	}
+	return nil
 }
 
 // writePIDFile retrieves the current process ID and writes it to file.

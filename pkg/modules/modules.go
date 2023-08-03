@@ -19,8 +19,8 @@ type Engine interface {
 }
 
 type Manager interface {
-	RegisterModule(name string, initFn func() (services.Service, error), deps ...string)
-	RegisterInvisibleModule(name string, initFn func() (services.Service, error), deps ...string)
+	RegisterModule(name string, fn initFn)
+	RegisterInvisibleModule(name string, fn initFn)
 }
 
 var _ Engine = (*service)(nil)
@@ -133,17 +133,17 @@ func (m *service) Shutdown(ctx context.Context) error {
 	return m.ServiceManager.AwaitStopped(ctx)
 }
 
+type initFn func() (services.Service, error)
+
 // RegisterModule registers a module with the dskit module manager.
-func (m *service) RegisterModule(name string, initFn func() (services.Service, error), deps ...string) {
-	m.ModuleManager.RegisterModule(name, initFn)
-	m.dependencyMap[name] = deps
+func (m *service) RegisterModule(name string, fn initFn) {
+	m.ModuleManager.RegisterModule(name, fn)
 }
 
 // RegisterInvisibleModule registers an invisible module with the dskit module manager.
 // Invisible modules are not visible to the user, and are intendent to be used as dependencies.
-func (m *service) RegisterInvisibleModule(name string, initFn func() (services.Service, error), deps ...string) {
-	m.ModuleManager.RegisterModule(name, initFn, modules.UserInvisibleModule)
-	m.dependencyMap[name] = deps
+func (m *service) RegisterInvisibleModule(name string, fn initFn) {
+	m.ModuleManager.RegisterModule(name, fn, modules.UserInvisibleModule)
 }
 
 // IsModuleEnabled returns true if the module is enabled.
