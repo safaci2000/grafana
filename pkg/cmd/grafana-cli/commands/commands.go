@@ -11,7 +11,7 @@ import (
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/utils"
 	"github.com/grafana/grafana/pkg/infra/db"
-	"github.com/grafana/grafana/pkg/server"
+	server "github.com/grafana/grafana/pkg/modules/all"
 	"github.com/grafana/grafana/pkg/setting"
 )
 

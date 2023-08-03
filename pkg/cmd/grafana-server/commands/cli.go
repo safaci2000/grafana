@@ -6,17 +6,21 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"path"
 	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/grafana/dskit/services"
 	"github.com/urfave/cli/v2"
 
 	"github.com/grafana/grafana/pkg/api"
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/infra/process"
-	"github.com/grafana/grafana/pkg/server"
+	"github.com/grafana/grafana/pkg/modules"
+	server "github.com/grafana/grafana/pkg/modules/all"
+	grafanaapiserver "github.com/grafana/grafana/pkg/modules/grafana-apiserver"
 	_ "github.com/grafana/grafana/pkg/services/alerting/conditions"
 	_ "github.com/grafana/grafana/pkg/services/alerting/notifiers"
 	"github.com/grafana/grafana/pkg/setting"
@@ -93,31 +97,39 @@ func RunServer(opts ServerOptions) error {
 	checkPrivileges()
 
 	configOptions := strings.Split(ConfigOverrides, " ")
+	args := setting.CommandLineArgs{
+		Config:   ConfigFile,
+		HomePath: HomePath,
+		// tailing arguments have precedence over the options string
+		Args: append(configOptions, opts.Context.Args().Slice()...),
+	}
 
-	s, err := server.Initialize(
-		setting.CommandLineArgs{
-			Config:   ConfigFile,
-			HomePath: HomePath,
-			// tailing arguments have precedence over the options string
-			Args: append(configOptions, opts.Context.Args().Slice()...),
-		},
-		server.Options{
-			PidFile:     PidFile,
-			Version:     opts.Version,
-			Commit:      opts.Commit,
-			BuildBranch: opts.BuildBranch,
-		},
-		api.ServerOptions{},
-	)
+	cfg, err := setting.NewCfgFromArgs(args)
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
 
-	go listenToSystemSignals(ctx, s)
+	moduleManager := modules.New(cfg.Target)
+	moduleManager.RegisterModule(modules.All, func() (services.Service, error) {
+		return server.Initialize(args,
+			server.Options{
+				PidFile:     PidFile,
+				Version:     opts.Version,
+				Commit:      opts.Commit,
+				BuildBranch: opts.BuildBranch,
+			},
+			api.ServerOptions{})
+	})
 
-	return s.Run()
+	moduleManager.RegisterModule(modules.GrafanaAPIServer, func() (services.Service, error) {
+		return grafanaapiserver.New(path.Join(cfg.DataPath, "k8s"))
+	})
+
+	go listenToSystemSignals(ctx, moduleManager)
+
+	return moduleManager.Run(ctx)
 }
 
 func validPackaging(packaging string) string {
@@ -130,7 +142,7 @@ func validPackaging(packaging string) string {
 	return "unknown"
 }
 
-func listenToSystemSignals(ctx context.Context, s *server.Server) {
+func listenToSystemSignals(ctx context.Context, s modules.Engine) {
 	signalChan := make(chan os.Signal, 1)
 	sighupChan := make(chan os.Signal, 1)
 
