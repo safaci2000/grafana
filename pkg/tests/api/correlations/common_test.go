@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/grafana/grafana/pkg/server"
+	"github.com/grafana/grafana/pkg/modules/all"
 	"github.com/grafana/grafana/pkg/services/correlations"
 	"github.com/grafana/grafana/pkg/services/datasources"
 	"github.com/grafana/grafana/pkg/services/org/orgimpl"
@@ -26,7 +26,7 @@ type errorResponseBody struct {
 }
 
 type TestContext struct {
-	env server.TestEnv
+	env all.TestEnv
 	t   *testing.T
 }
 

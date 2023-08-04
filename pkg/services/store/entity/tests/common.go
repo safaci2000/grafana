@@ -10,7 +10,7 @@ import (
 
 	"github.com/grafana/grafana/pkg/components/satokengen"
 	"github.com/grafana/grafana/pkg/infra/appcontext"
-	"github.com/grafana/grafana/pkg/server"
+	"github.com/grafana/grafana/pkg/modules/all"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
 	"github.com/grafana/grafana/pkg/services/org"
 	saAPI "github.com/grafana/grafana/pkg/services/serviceaccounts/api"
@@ -20,7 +20,7 @@ import (
 	"github.com/grafana/grafana/pkg/tests/testinfra"
 )
 
-func createServiceAccountAdminToken(t *testing.T, env *server.TestEnv) (string, *user.SignedInUser) {
+func createServiceAccountAdminToken(t *testing.T, env *all.TestEnv) (string, *user.SignedInUser) {
 	t.Helper()
 
 	account := saTests.SetupUserServiceAccount(t, env.SQLStore, saTests.TestUser{

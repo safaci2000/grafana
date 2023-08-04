@@ -1,4 +1,4 @@
-package server
+package all
 
 import (
 	"context"
@@ -79,39 +79,13 @@ func TestServer_Shutdown(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		err := s.Shutdown(ctx, "test interrupt")
+		s.StopAsync()
+		err := s.AwaitTerminated(ctx)
 		ch <- err
 	}()
-	err := s.Run()
+	err := s.StartAsync(ctx)
 	require.NoError(t, err)
 
 	err = <-ch
 	require.NoError(t, err)
-}
-
-type MockModuleService struct {
-	initFunc     func(context.Context) error
-	runFunc      func(context.Context) error
-	shutdownFunc func(context.Context) error
-}
-
-func (m *MockModuleService) Init(ctx context.Context) error {
-	if m.initFunc != nil {
-		return m.initFunc(ctx)
-	}
-	return nil
-}
-
-func (m *MockModuleService) Run(ctx context.Context) error {
-	if m.runFunc != nil {
-		return m.runFunc(ctx)
-	}
-	return nil
-}
-
-func (m *MockModuleService) Shutdown(ctx context.Context) error {
-	if m.shutdownFunc != nil {
-		return m.shutdownFunc(ctx)
-	}
-	return nil
 }

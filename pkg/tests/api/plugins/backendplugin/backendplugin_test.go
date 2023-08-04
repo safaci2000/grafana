@@ -17,10 +17,10 @@ import (
 
 	"github.com/grafana/grafana/pkg/api/dtos"
 	"github.com/grafana/grafana/pkg/components/simplejson"
+	"github.com/grafana/grafana/pkg/modules/all"
 	"github.com/grafana/grafana/pkg/plugins"
 	"github.com/grafana/grafana/pkg/plugins/backendplugin"
 	"github.com/grafana/grafana/pkg/plugins/log"
-	"github.com/grafana/grafana/pkg/server"
 	"github.com/grafana/grafana/pkg/services/datasources"
 	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/user"
@@ -268,7 +268,7 @@ type testScenarioContext struct {
 	testPluginID               string
 	uid                        string
 	grafanaListeningAddr       string
-	testEnv                    *server.TestEnv
+	testEnv                    *all.TestEnv
 	outgoingServer             *httptest.Server
 	outgoingRequest            *http.Request
 	backendTestPlugin          *testPlugin

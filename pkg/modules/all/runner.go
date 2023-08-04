@@ -1,4 +1,4 @@
-package server
+package all
 
 import (
 	"github.com/grafana/grafana/pkg/infra/db"

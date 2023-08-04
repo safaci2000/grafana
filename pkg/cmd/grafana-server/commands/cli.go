@@ -19,7 +19,7 @@ import (
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/infra/process"
 	"github.com/grafana/grafana/pkg/modules"
-	server "github.com/grafana/grafana/pkg/modules/all"
+	"github.com/grafana/grafana/pkg/modules/all"
 	grafanaapiserver "github.com/grafana/grafana/pkg/modules/grafana-apiserver"
 	_ "github.com/grafana/grafana/pkg/services/alerting/conditions"
 	_ "github.com/grafana/grafana/pkg/services/alerting/notifiers"
@@ -113,8 +113,8 @@ func RunServer(opts ServerOptions) error {
 
 	moduleManager := modules.New(cfg.Target)
 	moduleManager.RegisterModule(modules.All, func() (services.Service, error) {
-		return server.Initialize(args,
-			server.Options{
+		return all.Initialize(args,
+			all.Options{
 				PidFile:     PidFile,
 				Version:     opts.Version,
 				Commit:      opts.Commit,

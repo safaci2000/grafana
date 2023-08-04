@@ -20,7 +20,7 @@ import (
 	"github.com/grafana/grafana/pkg/extensions"
 	"github.com/grafana/grafana/pkg/infra/db"
 	"github.com/grafana/grafana/pkg/infra/fs"
-	"github.com/grafana/grafana/pkg/server"
+	"github.com/grafana/grafana/pkg/modules/all"
 	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/org/orgimpl"
 	"github.com/grafana/grafana/pkg/services/quota/quotaimpl"
@@ -38,7 +38,7 @@ func StartGrafana(t *testing.T, grafDir, cfgPath string) (string, *sqlstore.SQLS
 	return addr, env.SQLStore
 }
 
-func StartGrafanaEnv(t *testing.T, grafDir, cfgPath string) (string, *server.TestEnv) {
+func StartGrafanaEnv(t *testing.T, grafDir, cfgPath string) (string, *all.TestEnv) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -46,10 +46,10 @@ func StartGrafanaEnv(t *testing.T, grafDir, cfgPath string) (string, *server.Tes
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	cmdLineArgs := setting.CommandLineArgs{Config: cfgPath, HomePath: grafDir}
-	serverOpts := server.Options{Listener: listener, HomePath: grafDir}
+	serverOpts := all.Options{Listener: listener, HomePath: grafDir}
 	apiServerOpts := api.ServerOptions{Listener: listener}
 
-	env, err := server.InitializeForTest(cmdLineArgs, serverOpts, apiServerOpts)
+	env, err := all.InitializeForTest(cmdLineArgs, serverOpts, apiServerOpts)
 	require.NoError(t, err)
 	require.NoError(t, env.SQLStore.Sync())
 
@@ -60,12 +60,13 @@ func StartGrafanaEnv(t *testing.T, grafDir, cfgPath string) (string, *server.Tes
 
 	go func() {
 		// When the server runs, it will also build and initialize the service graph
-		if err := env.Server.Run(); err != nil {
+		if err := env.Server.StartAsync(ctx); err != nil {
 			t.Log("Server exited uncleanly", "error", err)
 		}
 	}()
 	t.Cleanup(func() {
-		if err := env.Server.Shutdown(ctx, "test cleanup"); err != nil {
+		env.Server.StopAsync()
+		if err := env.Server.AwaitTerminated(ctx); err != nil {
 			t.Error("Timed out waiting on server to shut down")
 		}
 	})

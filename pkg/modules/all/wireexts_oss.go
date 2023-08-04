@@ -1,7 +1,7 @@
 //go:build wireinject && oss
 // +build wireinject,oss
 
-package server
+package all
 
 import (
 	"github.com/google/wire"
