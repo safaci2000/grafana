@@ -10,14 +10,14 @@ import (
 
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/utils"
-	server "github.com/grafana/grafana/pkg/modules/all"
+	"github.com/grafana/grafana/pkg/modules/all"
 	"github.com/grafana/grafana/pkg/services/user"
 	"github.com/grafana/grafana/pkg/util"
 )
 
 const DefaultAdminUserId = 1
 
-func resetPasswordCommand(c utils.CommandLine, runner server.Runner) error {
+func resetPasswordCommand(c utils.CommandLine, runner all.Runner) error {
 	newPassword := ""
 	adminId := int64(c.Int("user-id"))
 
