@@ -194,7 +194,7 @@ func (s *Service) buildDSNode(dp *simple.DirectedGraph, rn *rawNode, req *Reques
 
 // executeDSNodesGrouped groups datasource node queries by the datasource instance, and then sends them
 // in a single request with one or more queries to the datasource.
-func executeDSNodesGrouped(ctx context.Context, now time.Time, vars mathexp.Vars, s *Service, nodes []*DSNode) (e error) {
+func executeDSNodesGrouped(ctx context.Context, now time.Time, vars mathexp.Vars, s *Service, nodes []*DSNode) {
 	type dsKey struct {
 		uid   string // in theory I think this all I need for the key, but rather be safe
 		id    int64
@@ -210,7 +210,10 @@ func executeDSNodesGrouped(ctx context.Context, now time.Time, vars mathexp.Vars
 		firstNode := nodeGroup[0]
 		pCtx, err := s.pCtxProvider.GetWithDataSource(ctx, firstNode.datasource.Type, firstNode.request.User, firstNode.datasource)
 		if err != nil {
-			return err
+			for _, dn := range nodeGroup {
+				vars[dn.refID] = mathexp.Results{Error: fmt.Errorf("could not get datasource: %w", err)} // TODO errutil public
+			}
+			continue
 		}
 
 		logger := logger.FromContext(ctx).New("datasourceType", firstNode.datasource.Type,
@@ -241,11 +244,10 @@ func executeDSNodesGrouped(ctx context.Context, now time.Time, vars mathexp.Vars
 			})
 		}
 
-		responseType := "unknown"
-		respStatus := "success"
-		defer func() {
+		instrument := func(e error, rt string) {
+			respStatus := "success"
 			if e != nil {
-				responseType = "error"
+				rt = "error"
 				respStatus = "failure"
 				span.AddEvents([]string{"error", "message"},
 					[]tracing.EventValue{
@@ -253,31 +255,37 @@ func executeDSNodesGrouped(ctx context.Context, now time.Time, vars mathexp.Vars
 						{Str: "failed to query data source"},
 					})
 			}
-			logger.Debug("Data source queried", "responseType", responseType)
-			useDataplane := strings.HasPrefix(responseType, "dataplane-")
+			logger.Debug("Data source queried", "responseType", rt)
+			useDataplane := strings.HasPrefix(rt, "dataplane-")
 			s.metrics.dsRequests.WithLabelValues(respStatus, fmt.Sprintf("%t", useDataplane), firstNode.datasource.Type).Inc()
-		}()
+		}
 
 		resp, err := s.dataService.QueryData(ctx, req)
 		if err != nil {
-			return MakeQueryError(firstNode.refID, firstNode.datasource.UID, err)
+			for _, dn := range nodeGroup {
+				vars[dn.refID] = mathexp.Results{Error: MakeQueryError(firstNode.refID, firstNode.datasource.UID, err)}
+			}
+			instrument(err, "unknown")
+			continue
 		}
 
 		for _, dn := range nodeGroup {
 			dataFrames, err := getResponseFrame(resp, dn.refID)
 			if err != nil {
-				return MakeQueryError(dn.refID, dn.datasource.UID, err)
+				vars[dn.refID] = mathexp.Results{Error: MakeQueryError(dn.refID, dn.datasource.UID, err)}
+				continue
 			}
 
 			var result mathexp.Results
+			var responseType string
 			responseType, result, err = convertDataFramesToResults(ctx, dataFrames, dn.datasource.Type, s, logger)
 			if err != nil {
-				return MakeConversionError(dn.refID, err)
+				result.Error = MakeConversionError(dn.RefID(), err)
 			}
+			instrument(err, responseType)
 			vars[dn.refID] = result
 		}
 	}
-	return nil
 }
 
 // Execute runs the node and adds the results to vars. If the node requires

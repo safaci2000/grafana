@@ -683,8 +683,8 @@ func (e *evaluatorImpl) create(condition models.Condition, req *expr.Request) (C
 	if err != nil {
 		return nil, err
 	}
-	conditions := make([]string, 0, len(pipeline))
-	for _, node := range pipeline {
+	conditions := make([]string, 0, len(pipeline.Nodes))
+	for _, node := range pipeline.Nodes {
 		if node.RefID() == condition.Condition {
 			return &conditionEvaluator{
 				pipeline:          pipeline,

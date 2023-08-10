@@ -49,7 +49,10 @@ type Node interface {
 }
 
 // DataPipeline is an ordered set of nodes returned from DPGraph processing.
-type DataPipeline []Node
+type DataPipeline struct {
+	Nodes []Node
+	Graph *simple.DirectedGraph
+}
 
 // execute runs all the command/datasource requests in the pipeline return a
 // map of the refId of the of each command
@@ -58,18 +61,20 @@ func (dp *DataPipeline) execute(c context.Context, now time.Time, s *Service) (m
 
 	// Execute datasource nodes first, and grouped by datasource.
 	dsNodes := []*DSNode{}
-	for _, node := range *dp {
+	for _, node := range dp.Nodes {
 		if node.NodeType() != TypeDatasourceNode {
 			continue
 		}
 		dsNodes = append(dsNodes, node.(*DSNode))
 	}
 
-	if err := executeDSNodesGrouped(c, now, vars, s, dsNodes); err != nil {
-		return nil, err
-	}
+	executeDSNodesGrouped(c, now, vars, s, dsNodes)
 
-	for _, node := range *dp {
+	// TODO: Mark Dependent nodes of vars[X] that have result.Error != nil, and then don't execute dependent nodes,
+	// but instead set them to an error and return
+
+
+	for _, node := range dp.Nodes {
 		if node.NodeType() == TypeDatasourceNode {
 			continue // already executed via executeDSNodesGrouped
 		}
@@ -101,15 +106,15 @@ func (s *Service) buildPipeline(req *Request) (DataPipeline, error) {
 
 	graph, err := s.buildDependencyGraph(req)
 	if err != nil {
-		return nil, err
+		return DataPipeline{}, err
 	}
 
 	nodes, err := buildExecutionOrder(graph)
 	if err != nil {
-		return nil, err
+		return DataPipeline{}, err
 	}
 
-	return nodes, nil
+	return DataPipeline{nodes, graph}, nil
 }
 
 // buildDependencyGraph returns a dependency graph for a set of queries.
