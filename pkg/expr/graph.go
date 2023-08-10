@@ -49,10 +49,7 @@ type Node interface {
 }
 
 // DataPipeline is an ordered set of nodes returned from DPGraph processing.
-type DataPipeline struct {
-	Nodes []Node
-	Graph *simple.DirectedGraph
-}
+type DataPipeline []Node
 
 // execute runs all the command/datasource requests in the pipeline return a
 // map of the refId of the of each command
@@ -61,7 +58,7 @@ func (dp *DataPipeline) execute(c context.Context, now time.Time, s *Service) (m
 
 	// Execute datasource nodes first, and grouped by datasource.
 	dsNodes := []*DSNode{}
-	for _, node := range dp.Nodes {
+	for _, node := range *dp {
 		if node.NodeType() != TypeDatasourceNode {
 			continue
 		}
@@ -73,11 +70,30 @@ func (dp *DataPipeline) execute(c context.Context, now time.Time, s *Service) (m
 	// TODO: Mark Dependent nodes of vars[X] that have result.Error != nil, and then don't execute dependent nodes,
 	// but instead set them to an error and return
 
-
-	for _, node := range dp.Nodes {
+	for _, node := range *dp {
 		if node.NodeType() == TypeDatasourceNode {
 			continue // already executed via executeDSNodesGrouped
 		}
+
+		var hasDepError bool
+		if cmd, ok := node.(*CMDNode); ok {
+			for _, neededVar := range cmd.Command.NeedsVars() {
+				if res, ok := vars[neededVar]; ok {
+					if res.Error != nil {
+						errResult := mathexp.Results{
+							Error: fmt.Errorf("not executing expression %v because expression %v errored", node.RefID(), neededVar), // TODO errutil
+						}
+						vars[node.RefID()] = errResult
+						hasDepError = true
+						break
+					}
+				}
+			}
+		}
+		if hasDepError {
+			continue
+		}
+
 		c, span := s.tracer.Start(c, "SSE.ExecuteNode")
 		span.SetAttributes("node.refId", node.RefID(), attribute.Key("node.refId").String(node.RefID()))
 		if node.NodeType() == TypeCMDNode {
@@ -89,7 +105,7 @@ func (dp *DataPipeline) execute(c context.Context, now time.Time, s *Service) (m
 
 		res, err := node.Execute(c, now, vars, s)
 		if err != nil {
-			return nil, err
+			res.Error = err
 		}
 
 		vars[node.RefID()] = res
@@ -114,7 +130,7 @@ func (s *Service) buildPipeline(req *Request) (DataPipeline, error) {
 		return DataPipeline{}, err
 	}
 
-	return DataPipeline{nodes, graph}, nil
+	return nodes, nil
 }
 
 // buildDependencyGraph returns a dependency graph for a set of queries.
@@ -168,7 +184,6 @@ func buildNodeRegistry(g *simple.DirectedGraph) map[string]Node {
 // buildGraph creates a new graph populated with nodes for every query.
 func (s *Service) buildGraph(req *Request) (*simple.DirectedGraph, error) {
 	dp := simple.NewDirectedGraph()
-
 	for i, query := range req.Queries {
 		if query.DataSource == nil || query.DataSource.UID == "" {
 			return nil, fmt.Errorf("missing datasource uid in query with refId %v", query.RefID)
