@@ -36,6 +36,10 @@ jest.mock('@grafana/runtime', () => ({
     get: getMock,
   }),
   getAppEvents: () => mockAppEvents,
+  config: {
+    ...jest.requireActual('@grafana/runtime').config,
+    awsAssumeRoleEnabled: undefined,
+  },
 }));
 
 const props: Props = {
@@ -107,9 +111,6 @@ const setup = (optionOverrides?: Partial<Props['options']>) => {
 
 describe('Render', () => {
   beforeEach(() => {
-    (window as any).grafanaBootData = {
-      settings: {},
-    };
     jest.resetAllMocks();
     putMock.mockImplementation(async () => ({ datasource: setupMockedDataSource().datasource }));
     getMock.mockImplementation(async () => ({ datasource: setupMockedDataSource().datasource }));
